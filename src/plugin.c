@@ -34,6 +34,7 @@ static char* SSE_PLUGIN_DISPLAY_NAME = "TeamSpeak3 to SSE3";
 static char* SSE_PLUGIN_DESCRIPTION = "This plugin should connect your TS3 client with your Steelseries Engine 3 allowing to access basic information such as who's currently talking and messages sent in the room you are currently in";
 
 int SSE3Port;
+int messageCounter = 1;
 char* SSE3HostName = NULL;
 char SSE3HostNameWithPort[128] = "";
 
