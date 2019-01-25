@@ -67,3 +67,5 @@ src/x64/Debug/test_plugin.tlog/link.read.1.tlog
 src/x64/Debug/test_plugin.tlog/CL.write.1.tlog
 src/x64/Debug/test_plugin.tlog/link.command.1.tlog
 src/x64/Debug/test_plugin.tlog/CL.read.1.tlog
+/src/.vs/test_plugin/v15/ipch/AutoPCH/a2296544bbc82f22/PLUGIN.ipch
+/src/.vs/test_plugin/v15/Browse.VC.opendb
