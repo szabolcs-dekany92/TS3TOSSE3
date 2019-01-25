@@ -34,6 +34,7 @@ static char* SSE_PLUGIN_DISPLAY_NAME = "TeamSpeak3 to SSE3";
 static char* SSE_PLUGIN_DESCRIPTION = "This plugin should connect your TS3 client with your Steelseries Engine 3 allowing to access basic information such as who's currently talking and messages sent in the room you are currently in";
 
 int SSE3Port;
+int messageCounter = 1;
 char* SSE3HostName = NULL;
 char SSE3HostNameWithPort[128] = "";
 
@@ -1046,6 +1047,8 @@ void executeSSE3Post(char *endpointName, char *jsonStringData){
 
 		curl_easy_cleanup(curl);
 		curl_global_cleanup();
+
+		messageCounter = messageCounter++;
 	}
 }
 
@@ -1062,7 +1065,6 @@ int registerPlugin() {
 	cJSON *pluginColorId = cJSON_CreateNumber(5);
 	cJSON_AddItemToObject(registerJson, "game", pluginName);
 	cJSON_AddItemToObject(registerJson, "game_display_name", pluginDisplayName);
-	//cJSON_AddItemToObject(registerJson, "game_description", pluginDescription); //Does not appear to work
 	cJSON_AddItemToObject(registerJson, "icon_color_id", pluginColorId);
 	executeSSE3Post(SSE_ENDPOINT_METADATA, cJSON_Print(registerJson));
 
@@ -1111,6 +1113,7 @@ int registerPokeSenderEvent() {
 	cJSON *pokeEventHandlerTactilePatternsArray = cJSON_CreateArray();
 	cJSON* pokeEventHandlerTactilePatternsArrayValues = cJSON_CreateObject();
 	cJSON *pokeEventHandlerTactilePatternsType = cJSON_CreateString("ti_predefined_tripleclick_100");
+	cJSON *handlerDatasArgs = cJSON_CreateString("(custom-text:(context-frame: self))");
 
 
 	/* Creating the poke object */
@@ -1139,6 +1142,7 @@ int registerPokeSenderEvent() {
 	cJSON_AddBoolToObject(handlerDatasValuesSender, "has-text", handlerDatasHasTextSender);
 	cJSON_AddItemToObject(handlerDatasValuesSender, "prefix", handlerDatasPrefixSender);
 	cJSON_AddItemToObject(handlerDatasValuesSender, "icon_id", handlerDatasIconIdSender);
+	cJSON_AddItemToObject(handlerDatasValuesSender, "arg", handlerDatasArgs);
 
 	cJSON_AddItemToArray(handlerDatasArray, handlerDatasValuesSender);
 
@@ -1221,13 +1225,17 @@ int sendSSE3PokeEventSender(char *userName) {
 
 
 	cJSON *eventDataSender = cJSON_CreateObject();
+	cJSON *eventDataFrame = cJSON_CreateObject();
 	cJSON *eventDataValueSender = cJSON_CreateString(userName);
+	cJSON *dataIncrementalValue = cJSON_CreateNumber(messageCounter);
 
 	cJSON_AddItemToObject(testEventSender, "game", eventPLuginNameSender);
 	cJSON_AddItemToObject(testEventSender, "event", eventEeventNameSender);
 	cJSON_AddItemToObject(testEventSender, "data", eventDataSender);
-	cJSON_AddItemToObject(eventDataSender, "value", eventDataValueSender);
+	cJSON_AddItemToObject(eventDataSender, "value", dataIncrementalValue);
+	cJSON_AddItemToObject(eventDataSender, "frame", eventDataFrame);
 
+	cJSON_AddItemToObject(eventDataFrame, "custom-text", eventDataValueSender);
 	executeSSE3Post(SSE_ENDPOINT_GAME_EVENT, cJSON_Print(testEventSender));
 
 	free(testEventSender);
@@ -1245,12 +1253,14 @@ int sendSSE3PokeEventMessage(char *message) {
 	cJSON *eventData = cJSON_CreateObject();
 	cJSON *eventDataFrame = cJSON_CreateObject();
 	cJSON *eventDataValueFrame = cJSON_CreateString(message);
+	cJSON *dataIncrementalValue = cJSON_CreateNumber(messageCounter);
 
 	cJSON_AddItemToObject(testEvent, "game", eventPLuginName);
 	cJSON_AddItemToObject(testEvent, "event", eventEeventName);
 	cJSON_AddItemToObject(testEvent, "data", eventData);
 	cJSON_AddItemToObject(eventData, "frame", eventDataFrame);
 	cJSON_AddItemToObject(eventDataFrame, "custom-text", eventDataValueFrame);
+	cJSON_AddItemToObject(eventData, "value", dataIncrementalValue);
 
 	executeSSE3Post(SSE_ENDPOINT_GAME_EVENT, cJSON_Print(testEvent));
 
