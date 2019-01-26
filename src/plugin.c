@@ -23,6 +23,7 @@
 #include "cJSON.h"
 #include "cJSON_Utils.h"
 #include "curl/curl.h"
+#include "sse3_functions.h"
 
 //PLUGIN SPECIFIC VARIABLES, FUNCTIONS, ETC...
 static char* SSE_ENDPOINT_HEARTBEAT = "game_heartbeat";
@@ -39,21 +40,6 @@ int SSE3Port;
 int messageCounter = 1;
 char* SSE3HostName = NULL;
 char SSE3HostNameWithPort[128] = "";
-
-void readSSE3Config(char*);
-void executeSSE3Post(char*, char*);
-void registerWithSSE3();
-void setupSSE3HeartBeatThread();
-int sse3_deauthFromSSE3();
-DWORD WINAPI sendSSE3HeartBeat();
-DWORD WINAPI sendSSE3PokeEvent(LPVOID stringParams);
-char *stringcopywithpointer(const char *source);
-struct PokeParameters
-{
-	char *user;
-	char *messages;
-};
-
 
 
 static struct TS3Functions ts3Functions;
@@ -152,8 +138,8 @@ int ts3plugin_init() {
 	 * such as announcing the plugin to SSE3 and setting up a heartbeat thread
 	 */
     printf("TS3TOSSE3: init\n");
-	readSSE3Config("C:\\ProgramData\\SteelSeries\\SteelSeries Engine 3\\coreProps.json");
-	registerWithSSE3();
+	sse3_readConfig("C:\\ProgramData\\SteelSeries\\SteelSeries Engine 3\\coreProps.json");
+	sse3_register();
 	//setupSSE3HeartBeatThread(); //TODO ezt vissza
 
     /* Example on how to query application, resources and configuration paths from client */
@@ -857,7 +843,7 @@ int ts3plugin_onClientPokeEvent(uint64 serverConnectionHandlerID, anyID fromClie
 	printf("TS3TOSSE3: atadott parameterek: %s - %s \n", tPokeParameters->user, tPokeParameters->messages);
 
 	printf("TS3TOSSE3: Sending Poke event \n");
-	HANDLE thread = CreateThread(NULL, 0, sendSSE3PokeEvent, tPokeParameters, 0, NULL);
+	HANDLE thread = CreateThread(NULL, 0, sse3_sendPoke, tPokeParameters, 0, NULL);
 	
     return 0;  /* 0 = handle normally, 1 = client will ignore the poke */
 }
@@ -959,7 +945,7 @@ const char* ts3plugin_keyPrefix() {
 	extending it to read out SSE3 hostname and port
 
 */
-void readSSE3Config(char *filename){
+int sse3_readConfig(char *filename){
 	printf("TS3TOSSE3: Finding SSE3 Config\n");
 	char *buffer = NULL;
 	const cJSON *address = NULL;
@@ -980,6 +966,7 @@ void readSSE3Config(char *filename){
 		}
 
 		fclose(handler);
+
 	}
 
 	cJSON *address_json = cJSON_Parse(buffer);
@@ -1005,6 +992,8 @@ void readSSE3Config(char *filename){
 			}
 		}
 	}
+
+	return 0;
 }
 
 /*
@@ -1014,7 +1003,7 @@ void readSSE3Config(char *filename){
 	jsonStringData - the compiled JSON data we want to send to the endpoint
 
 */
-void executeSSE3Post(char *endpointName, char *jsonStringData){
+int sse3_executePost(char *endpointName, char *jsonStringData){
 	CURL *curl;
 	CURLcode res;
 	curl_global_init(CURL_GLOBAL_ALL);
@@ -1055,14 +1044,18 @@ void executeSSE3Post(char *endpointName, char *jsonStringData){
 
 		messageCounter = messageCounter++;
 	}
+
+	return 0;
 }
 
-void registerWithSSE3(){
-	registerPlugin();
-	registerEvents();
+int sse3_register(){
+	sse3_registerPlugin();
+	sse3_registerPluginEvents();
+
+	return 0;
 }
 
-int registerPlugin() {
+int sse3_registerPlugin() {
 	cJSON* registerJson = cJSON_CreateObject();
 	cJSON *pluginName = cJSON_CreateString(SSE_PLUGIN_NAME);
 	cJSON *pluginDisplayName = cJSON_CreateString(SSE_PLUGIN_DISPLAY_NAME);
@@ -1071,15 +1064,15 @@ int registerPlugin() {
 	cJSON_AddItemToObject(registerJson, "game", pluginName);
 	cJSON_AddItemToObject(registerJson, "game_display_name", pluginDisplayName);
 	cJSON_AddItemToObject(registerJson, "icon_color_id", pluginColorId);
-	executeSSE3Post(SSE_ENDPOINT_METADATA, cJSON_Print(registerJson));
+	sse3_executePost(SSE_ENDPOINT_METADATA, cJSON_Print(registerJson));
 
 	return 0;
 }
 
-int registerEvents() {
-	registerPokeSenderEvent();
-	registerPokeMessageEvent();
-	registerCurrentlyTalkingEvent();
+int sse3_registerPluginEvents() {
+	sse3_registerPluginEventPokeHeader();
+	sse3_registerPluginEventTextDisplay();
+	sse3_registerPluginEventCurrentlyTalking();
 	return 0;
 }
 
@@ -1089,7 +1082,7 @@ int registerEvents() {
  * The contects of the poke is displayed using the registerPokeMessageEvent() 
  * method with POKE_MESSAGE event
  */
-int registerPokeSenderEvent() {
+int sse3_registerPluginEventPokeHeader() {
 	/* Poke event */
 	cJSON* pokeEvent = cJSON_CreateObject();
 
@@ -1152,7 +1145,7 @@ int registerPokeSenderEvent() {
 	cJSON_AddItemToArray(handlerDatasArray, handlerDatasValuesSender);
 
 
-	executeSSE3Post(SSE_ENDPOINT_BIND_GAME_EVENT, cJSON_Print(pokeEvent));
+	sse3_executePost(SSE_ENDPOINT_BIND_GAME_EVENT, cJSON_Print(pokeEvent));
 	return 0;
 }
 
@@ -1162,7 +1155,7 @@ int registerPokeSenderEvent() {
  * The contects of the poke is displayed using the registerPokeSenderEvent()
  * method with POKE_SENDER event
  */
-int registerPokeMessageEvent() {
+int sse3_registerPluginEventTextDisplay() {
 	/* Poke Message event */
 	cJSON* pokeEvent = cJSON_CreateObject();
 
@@ -1203,25 +1196,25 @@ int registerPokeMessageEvent() {
 	cJSON_AddItemToArray(handlerDatasArray, handlerDatasValuesMessage);
 
 
-	executeSSE3Post(SSE_ENDPOINT_BIND_GAME_EVENT, cJSON_Print(pokeEvent));
+	sse3_executePost(SSE_ENDPOINT_BIND_GAME_EVENT, cJSON_Print(pokeEvent));
 	return 0;
 }
 
-int registerCurrentlyTalkingEvent() {
+int sse3_registerPluginEventCurrentlyTalking() {
 
 	return 0;
 }
 
-DWORD WINAPI sendSSE3PokeEvent(LPVOID params) {
+DWORD WINAPI sse3_sendPoke(LPVOID params) {
 	struct PokeParameters *tPokeParamteres = (struct PokeParameters *)params;
 	printf("TS3TOSSE3: PokeEvent params: %s - %s \n", tPokeParamteres->user, tPokeParamteres->messages);
-	sendSSE3PokeEventSender(tPokeParamteres->user);
+	sse3_sendEventPokeHeader(tPokeParamteres->user);
 	Sleep(5000);
-	sendSSE3PokeEventMessage(tPokeParamteres->messages);
+	sse3_sendEventTextDisplay(tPokeParamteres->messages);
 	free(params);
 }
 
-int sendSSE3PokeEventSender(char *userName) {
+int sse3_sendEventPokeHeader(char *userName) {
 
 	cJSON* testEventSender = cJSON_CreateObject();
 
@@ -1241,13 +1234,13 @@ int sendSSE3PokeEventSender(char *userName) {
 	cJSON_AddItemToObject(eventDataSender, "frame", eventDataFrame);
 
 	cJSON_AddItemToObject(eventDataFrame, "custom-text", eventDataValueSender);
-	executeSSE3Post(SSE_ENDPOINT_GAME_EVENT, cJSON_Print(testEventSender));
+	sse3_executePost(SSE_ENDPOINT_GAME_EVENT, cJSON_Print(testEventSender));
 
 	free(testEventSender);
 	return 0;
 }
 
-int sendSSE3PokeEventMessage(char *message) {
+int sse3_sendEventTextDisplay(char *message) {
 
 	cJSON* testEvent = cJSON_CreateObject();
 
@@ -1267,26 +1260,28 @@ int sendSSE3PokeEventMessage(char *message) {
 	cJSON_AddItemToObject(eventDataFrame, "custom-text", eventDataValueFrame);
 	cJSON_AddItemToObject(eventData, "value", dataIncrementalValue);
 
-	executeSSE3Post(SSE_ENDPOINT_GAME_EVENT, cJSON_Print(testEvent));
+	sse3_executePost(SSE_ENDPOINT_GAME_EVENT, cJSON_Print(testEvent));
 
 	free(testEvent);
 	return 0;
 }
 
-DWORD WINAPI sendSSE3HeartBeat(){
+DWORD WINAPI sse3_sendHeartBeat(){
 	cJSON* heartbeatJson = cJSON_CreateObject();
 	cJSON *pluginName = cJSON_CreateString(SSE_PLUGIN_NAME);
 	cJSON_AddItemToObject(heartbeatJson, "game", pluginName);
 	while (1) {
-		executeSSE3Post(SSE_ENDPOINT_HEARTBEAT, cJSON_Print(heartbeatJson));
+		sse3_executePost(SSE_ENDPOINT_HEARTBEAT, cJSON_Print(heartbeatJson));
 		Sleep(14000);
 	}
 	
 }
 
-void setupSSE3HeartBeatThread(){
+int sse3_setupHeartBeat(){
 	printf("TS3TOSSE3: Creating heartBeat thread \n");
-	HANDLE thread = CreateThread(NULL, 0, sendSSE3HeartBeat, NULL, 0, NULL);
+	HANDLE thread = CreateThread(NULL, 0, sse3_sendHeartBeat, NULL, 0, NULL);
+
+	return 0;
 }
 
 int sse3_deauthFromSSE3() {
@@ -1309,9 +1304,9 @@ int sse3_deauthFromSSE3() {
 
 	cJSON_AddItemToObject(pluginDeauthJson, "game", eventPLuginName3);
 
-	executeSSE3Post(SSE_ENDPOINT_REMOVE_GAME_EVENT, cJSON_Print(pokeEventHeaderDeauthJson));
-	executeSSE3Post(SSE_ENDPOINT_REMOVE_GAME_EVENT, cJSON_Print(pokeEventMessageDeauthJson));
-	executeSSE3Post(SSE_ENDPOINT_REMOVE_GAME, cJSON_Print(pluginDeauthJson));
+	sse3_executePost(SSE_ENDPOINT_REMOVE_GAME_EVENT, cJSON_Print(pokeEventHeaderDeauthJson));
+	sse3_executePost(SSE_ENDPOINT_REMOVE_GAME_EVENT, cJSON_Print(pokeEventMessageDeauthJson));
+	sse3_executePost(SSE_ENDPOINT_REMOVE_GAME, cJSON_Print(pluginDeauthJson));
 
 	return 0;
 }
