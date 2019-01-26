@@ -61,5 +61,8 @@
     <ClInclude Include="cJSON_Utils.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="sse3_functions.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>
