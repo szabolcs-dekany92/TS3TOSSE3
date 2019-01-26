@@ -29,6 +29,8 @@ static char* SSE_ENDPOINT_HEARTBEAT = "game_heartbeat";
 static char* SSE_ENDPOINT_GAME_EVENT = "game_event";
 static char* SSE_ENDPOINT_BIND_GAME_EVENT = "bind_game_event";
 static char* SSE_ENDPOINT_METADATA = "game_metadata";
+static char* SSE_ENDPOINT_REMOVE_GAME_EVENT = "remove_game_event";
+static char* SSE_ENDPOINT_REMOVE_GAME = "remove_game";
 static char* SSE_PLUGIN_NAME = "TS3TOSSE3";
 static char* SSE_PLUGIN_DISPLAY_NAME = "TeamSpeak3 to SSE3";
 static char* SSE_PLUGIN_DESCRIPTION = "This plugin should connect your TS3 client with your Steelseries Engine 3 allowing to access basic information such as who's currently talking and messages sent in the room you are currently in";
@@ -42,6 +44,7 @@ void readSSE3Config(char*);
 void executeSSE3Post(char*, char*);
 void registerWithSSE3();
 void setupSSE3HeartBeatThread();
+int sse3_deauthFromSSE3();
 DWORD WINAPI sendSSE3HeartBeat();
 DWORD WINAPI sendSSE3PokeEvent(LPVOID stringParams);
 char *stringcopywithpointer(const char *source);
@@ -172,7 +175,7 @@ int ts3plugin_init() {
 void ts3plugin_shutdown() {
     /* Your plugin cleanup code here */
     printf("TS3TOSSE3: shutdown\n");
-
+	
 	/*
 	 * Note:
 	 * If your plugin implements a settings dialog, it must be closed and deleted here, else the
@@ -184,6 +187,8 @@ void ts3plugin_shutdown() {
 		free(pluginID);
 		pluginID = NULL;
 	}
+
+	sse3_deauthFromSSE3();
 }
 
 /****************************** Optional functions ********************************/
@@ -222,7 +227,7 @@ void ts3plugin_registerPluginID(const char* id) {
 
 /* Plugin command keyword. Return NULL or "" if not used. */
 const char* ts3plugin_commandKeyword() {
-	return "test";
+	return NULL;
 }
 
 static void print_and_free_bookmarks_list(struct PluginBookmarkList* list)
@@ -1282,6 +1287,33 @@ DWORD WINAPI sendSSE3HeartBeat(){
 void setupSSE3HeartBeatThread(){
 	printf("TS3TOSSE3: Creating heartBeat thread \n");
 	HANDLE thread = CreateThread(NULL, 0, sendSSE3HeartBeat, NULL, 0, NULL);
+}
+
+int sse3_deauthFromSSE3() {
+	cJSON* pluginDeauthJson = cJSON_CreateObject();
+	cJSON* pokeEventHeaderDeauthJson = cJSON_CreateObject();
+	cJSON* pokeEventMessageDeauthJson = cJSON_CreateObject();
+	
+	cJSON *eventPLuginName1 = cJSON_CreateString(SSE_PLUGIN_NAME);
+	cJSON *eventPLuginName2 = cJSON_CreateString(SSE_PLUGIN_NAME);
+	cJSON *eventPLuginName3 = cJSON_CreateString(SSE_PLUGIN_NAME);
+
+	cJSON *eventEventNameMessage = cJSON_CreateString("POKE_MESSAGE");
+	cJSON *eventEventNameSender = cJSON_CreateString("POKE_SENDER");
+
+	cJSON_AddItemToObject(pokeEventMessageDeauthJson, "game", eventPLuginName1);
+	cJSON_AddItemToObject(pokeEventMessageDeauthJson, "event", eventEventNameMessage);
+
+	cJSON_AddItemToObject(pokeEventHeaderDeauthJson, "game", eventPLuginName2);
+	cJSON_AddItemToObject(pokeEventHeaderDeauthJson, "event", eventEventNameSender);
+
+	cJSON_AddItemToObject(pluginDeauthJson, "game", eventPLuginName3);
+
+	executeSSE3Post(SSE_ENDPOINT_REMOVE_GAME_EVENT, cJSON_Print(pokeEventHeaderDeauthJson));
+	executeSSE3Post(SSE_ENDPOINT_REMOVE_GAME_EVENT, cJSON_Print(pokeEventMessageDeauthJson));
+	executeSSE3Post(SSE_ENDPOINT_REMOVE_GAME, cJSON_Print(pluginDeauthJson));
+
+	return 0;
 }
 
 /*
